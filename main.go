@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -42,7 +43,6 @@ func crawl(url string) {
 	semaphore <- struct{}{}
 	response, err := client.Get(url)
 	if err != nil {
-		fmt.Printf("Error making http request: %s\n", err)
 		<-semaphore
 		return
 	}
@@ -79,10 +79,25 @@ func main() {
 		}
 		maxLinks = limit
 	}
-	
+
 	wg.Add(1)
 	go crawl(startURL)
 	wg.Wait()
 
-	fmt.Print(visited)
+	fmt.Println("-----------")
+	fmt.Println("Crawl finished")
+	fmt.Println("-----------")
+
+	fmt.Printf("Total unique links: %d\n\n", len(visited))
+
+	var links []string
+	for link := range visited {
+		links = append(links, link)
+	}
+
+	sort.Strings(links)
+
+	for i, link := range links {
+		fmt.Printf("%3d. %s\n", i+1, link)
+	}
 }
