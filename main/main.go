@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -17,6 +18,7 @@ var (
 	mu        sync.Mutex
 	wg        sync.WaitGroup
 	semaphore = make(chan struct{}, 10)
+	maxLinks int
 )
 
 func crawl(url string) {
@@ -25,6 +27,11 @@ func crawl(url string) {
 	mu.Lock()
 
 	if _, ok := visited[url]; ok {
+		mu.Unlock()
+		return
+	}
+
+	if maxLinks >0 && len(visited) >= maxLinks {
 		mu.Unlock()
 		return
 	}
@@ -57,13 +64,22 @@ func crawl(url string) {
 }
 
 func main() {
-	if len(os.Args) != 2 {
-		fmt.Println("Please insert exactly one URL")
+	if len(os.Args) < 2 || len(os.Args) > 3 {
+		fmt.Println("Usage: go run . <url> [maxLinks]")
     	return
 	}
 
 	startURL := os.Args[1]
 
+	if len(os.Args) == 3 {
+		limit, err := strconv.Atoi(os.Args[2])
+		if err != nil {
+			fmt.Println("Invalid maxLinks value. It should be an integer.")
+			return
+		}
+		maxLinks = limit
+	}
+	
 	wg.Add(1)
 	go crawl(startURL)
 	wg.Wait()
