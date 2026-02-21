@@ -1,25 +1,24 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"sort"
-	"strconv"
 	"sync"
 	"time"
 )
 
 var (
 	visited = make(map[string]struct{})
-	client = &http.Client{
+	client  = &http.Client{
 		Timeout: 5 * time.Second,
 	}
 	mu        sync.Mutex
 	wg        sync.WaitGroup
 	semaphore = make(chan struct{}, 10)
-	maxLinks int
+	maxLinks  int
 )
 
 func crawl(url string) {
@@ -32,7 +31,7 @@ func crawl(url string) {
 		return
 	}
 
-	if maxLinks >0 && len(visited) >= maxLinks {
+	if maxLinks > 0 && len(visited) >= maxLinks {
 		mu.Unlock()
 		return
 	}
@@ -46,7 +45,7 @@ func crawl(url string) {
 		<-semaphore
 		return
 	}
-	
+
 	body, err := io.ReadAll(response.Body)
 	response.Body.Close()
 	<-semaphore
@@ -64,29 +63,25 @@ func crawl(url string) {
 }
 
 func main() {
-	if len(os.Args) < 2 || len(os.Args) > 3 {
-		fmt.Println("Usage: go run . <url> [maxLinks]")
-    	return
+	urlFlag := flag.String("url", "", "Starting URL (required)")
+	limitFlag := flag.Int("limit", 0, "Maximum number of unique links (optional)")
+	flag.Parse()
+
+	if *urlFlag == "" {
+		fmt.Println("Usage:")
+		fmt.Println("  crawler -url=https://example.com [-limit=50]")
+		return
 	}
 
-	startURL := os.Args[1]
-
-	if len(os.Args) == 3 {
-		limit, err := strconv.Atoi(os.Args[2])
-		if err != nil {
-			fmt.Println("Invalid maxLinks value. It should be an integer.")
-			return
-		}
-		maxLinks = limit
-	}
+	maxLinks = *limitFlag
 
 	wg.Add(1)
-	go crawl(startURL)
+	go crawl(*urlFlag)
 	wg.Wait()
 
-	fmt.Println("-----------")
+	fmt.Println("==================================================")
 	fmt.Println("Crawl finished")
-	fmt.Println("-----------")
+	fmt.Println("==================================================")
 
 	fmt.Printf("Total unique links: %d\n\n", len(visited))
 
