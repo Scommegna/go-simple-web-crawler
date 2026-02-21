@@ -5,7 +5,56 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sync"
+	"time"
 )
+
+var (
+	visited = make(map[string]struct{})
+	client = &http.Client{
+		Timeout: 5 * time.Second,
+	}
+	mu        sync.Mutex
+	wg        sync.WaitGroup
+	semaphore = make(chan struct{}, 10)
+)
+
+func crawl(url string) {
+	defer wg.Done()
+
+	mu.Lock()
+
+	if _, ok := visited[url]; ok {
+		mu.Unlock()
+		return
+	}
+
+	visited[url] = struct{}{}
+	mu.Unlock()
+
+	semaphore <- struct{}{}
+	response, err := client.Get(url)
+	if err != nil {
+		fmt.Printf("Error making http request: %s\n", err)
+		<-semaphore
+		return
+	}
+	
+	body, err := io.ReadAll(response.Body)
+	response.Body.Close()
+	<-semaphore
+
+	if err != nil {
+		return
+	}
+
+	links := GetLinks(string(body))
+
+	for _, link := range links {
+		wg.Add(1)
+		go crawl(link)
+	}
+}
 
 func main() {
 	if len(os.Args) != 2 {
@@ -13,27 +62,11 @@ func main() {
     	return
 	}
 
-	httpLink := os.Args[1:]
+	startURL := os.Args[1]
 
-	response, err := http.Get(httpLink[0])
+	wg.Add(1)
+	go crawl(startURL)
+	wg.Wait()
 
-	if err != nil {
-		fmt.Printf("Error making http request: %s\n", err)
-		os.Exit(1)
-	}
-
-	defer response.Body.Close()
-
-	body, err := io.ReadAll(response.Body)
-
-	if err != nil {
-		fmt.Printf("Error reading the response body: %s\n", err)
-		os.Exit(1)
-	}
-
-	htmlContent := string(body)
-
-	links := GetLinks(htmlContent)
-
-	fmt.Print(links)
+	fmt.Print(visited)
 }
